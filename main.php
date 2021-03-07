@@ -1,25 +1,33 @@
 <?php
-  require('database.php');
-  require('function.php');
+  require('Connect.php');
+  require_once('function.php');
+  require('User.php');
+  require('Cpu.php');
+  require('Gamemaster.php');
+
+  //データベース関連の処理を行うクラスのインスタンスを作成
+  $select = new SelectData();
+  $insert = new InsertData();
+
+  //Hit&Blow並びに勝敗判定の処理を行うクラスのインスタンスを作成
+  $gamemaster = new GameMaster($my_score_numbers,$cpu_score_numbers);
 
   //自分が設定した3桁の数字を取得
-  $sql = "SELECT number FROM my_numbers WHERE id = (SELECT MAX(id) FROM my_numbers) ";
-  $stmt = $db->prepare($sql);
-  $stmt->execute();
-  $set_my_number = $stmt->fetch(PDO::FETCH_ASSOC);
-
-  //CPUがランダムに生成した3桁の数字を取得
-  $sql= "SELECT number FROM cpu_numbers WHERE id = (SELECT MAX(id) FROM cpu_numbers) ";
-  $stmt = $db->prepare($sql);
-  $stmt->execute();
-  $set_cpu_number = $stmt->fetch(PDO::FETCH_ASSOC);
-
-  //CPUの数字(テスト時のみ表示)
-  // echo "<h1>CPUの数字</h1>";
-  // echo "<h1>".$set_cpu_number['number'] ."</h1>";
+  $user = new User($select->selectUserData());
+  $set_my_number = $user->my_number;
   
-  //c.数字を当てる(自分：数字を入力する)
+  //CPUがランダムに生成した3桁の数字を取得
+  $cpu = new Cpu($select->selectCpuData());
+  $set_cpu_number = $cpu->cpu_number;
+  
+  //自分が入力した値を変数として格納する
   $input_number = $_POST['select_number'];
+
+  //自分自身のスコアを取得
+  $my_score_numbers = $select->selectMyScore();
+
+  //CPUのスコアを取得
+  $cpu_score_numbers = $select->selectCpuScore();
 
   if(!empty($_POST)){
     //バリデーション
@@ -27,31 +35,15 @@
       $unique_my_numbers = CreateUniqueNumber($input_number);
       if(count($unique_my_numbers) === 3){
         //自分が入力した3桁の数値をデータベースへ保存する
-        $stmt = $db->prepare('INSERT INTO select_numbers SET score=?');
-        $stmt->execute(array($input_number));
+        $user->CallNumber($input_number);
 
         //CPUが数字を当てる(CPUが入力した3桁の数値をデータベースへ保存する)
         $input_cpu_number = generateNumber();
-        $stmt = $db->prepare('INSERT INTO selected_numbers SET score=?');
-        $stmt->execute(array($input_cpu_number));
+        $cpu->CallSelectedNumber($input_cpu_number);
 
+        //CPUが相手の数字を当てるために入力した最新の数字(スコア)を取得
+        $cpu_last_score = $select->selectCpuLastScore();
 
-        $sql= "SELECT number FROM my_numbers WHERE id = (SELECT MAX(id) FROM my_numbers) ";
-        $stmt = $db->prepare($sql);
-        $stmt->execute();
-        $my_number = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        $sql= "SELECT score FROM selected_numbers WHERE id = (SELECT MAX(id) FROM selected_numbers) ";
-        $stmt = $db->prepare($sql);
-        $stmt->execute();
-        $cpu_score_number = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        $cpu_hit = getHitCount($cpu_score_number['score'],$my_number['number']);
-        $cpu_blow = getBlowCount($cpu_score_number['score'],$my_number['number']);
-        
-        $stmt = $db->prepare('INSERT INTO counts SET hit=?, blow=?');
-        $stmt->execute(array($cpu_hit,$cpu_blow));
-        
         header('Location: main.php');
         exit();
       }
@@ -62,15 +54,6 @@
       $error = 'blank';
     }
   }
-
-  //自分が数字を当てるために入力した値を取得する
-  $my_score_numbers = $db->query('SELECT score FROM select_numbers');
-
-  //CPUが数字を当てるために入力した値を取得する
-  $cpu_score_numbers = $db->query('SELECT score FROM selected_numbers');
-
-  
-
 ?>
 
 <!DOCTYPE html>
@@ -90,7 +73,7 @@
     </div>
     <div class="row">
       <div class="col-md-12">
-        <?php echo "<h2>あなたの数字：" .htmlspecialchars($set_my_number['number'],ENT_QUOTES). "</h2>"; ?>
+        <?php echo "<h2>あなたの数字：" .$set_my_number['number']. "</h2>"; ?>
       </div>
       <div class="col-md-6">
         <p>自分</p>
@@ -106,9 +89,9 @@
             <?php foreach($my_score_numbers as $my_score_number): ?>
               <tr>
                 <th scope="row"><?php echo htmlspecialchars($my_score_number['score'],ENT_QUOTES);?></th>
-                  <?php $my_hit = getHitCount($my_score_number['score'],$set_cpu_number['number'])?>
+                  <?php $my_hit = $gamemaster->getHitCount($my_score_number['score'],$set_cpu_number['number'])?>
                 <td><?php echo $my_hit; ?></td>
-                  <?php $my_blow = getBlowCount($my_score_number['score'],$set_cpu_number['number'])?>
+                  <?php $my_blow = $gamemaster->getBlowCount($my_score_number['score'],$set_cpu_number['number'])?>
                 <td><?php echo $my_blow; ?></td>
               </tr>
             <?php endforeach; ?>
@@ -129,20 +112,21 @@
             <?php foreach($cpu_score_numbers as $cpu_score_number): ?>
               <tr>
                 <th scope="row"><?php echo $cpu_score_number['score'];?></th>
-                  <?php $cpu_hit = getHitCount($cpu_score_number['score'],$set_my_number['number'])?>
+                  <?php $cpu_hit = $gamemaster->getHitCount($cpu_score_number['score'],$set_my_number['number'])?>
                 <td><?php echo $cpu_hit; ?></td>
-                  <?php $cpu_blow = getBlowCount($cpu_score_number['score'],$set_my_number['number'])?>
+                  <?php $cpu_blow = $gamemaster->getBlowCount($cpu_score_number['score'],$set_my_number['number'])?>
                 <td><?php echo $cpu_blow; ?></td>
               </tr>
             <?php endforeach; ?>
-            <?php $result = isWinner($my_hit,$cpu_hit); ?>
+            <?php $insert->insertCpuResult($cpu_hit,$cpu_blow); ?>
+            <?php $result = $gamemaster->isWinner($my_hit,$cpu_hit); ?>
           </tbody>
         </table>
       </div>
     </div>
     <?php if(isset($result)) :?>
       <?php echo "<h1>". $result. "</h1>"; ?>
-      <button class="btn btn-primary" onclick="location.href='start.php'">もう一度ゲームで遊ぶ</button>
+      <button class="btn btn-primary" onclick="location.href='start.php'" style="margin: 16px 0 16px 0">もう一度ゲームで遊ぶ</button>
     <?php else:?>
       <div class="form-group" style="padding-top:64px;">
           <form method="POST" action="">
