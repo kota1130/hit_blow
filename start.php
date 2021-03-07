@@ -1,8 +1,9 @@
 <?php
-  require('database.php');
+  require_once('Connect.php');
   require('function.php');
+  require('User.php');
 
-  //入力された値
+  //入力された値を変数として格納
   $input_number = $_POST['my_number'];
   
   if(!empty($_POST)){
@@ -10,23 +11,28 @@
     if(ctype_digit($input_number) && $input_number < 1000 ){
       $unique_my_numbers = CreateUniqueNumber($input_number);
       if(count($unique_my_numbers) === 3){
-        $stmt = $db->prepare('INSERT INTO my_numbers SET number=?');
-        $stmt->execute(array($input_number));
+        $connect = new Connect();
+        $insert  = new InsertData();
 
+        //ユーザーが最初に設定した3桁の数字をDBへ保存する
+        $insert->insertUserNumber($input_number);
+        
+        //ランダムに生成した値を変数に格納する
         $cpu_set_numbers = generateNumber();
-        $stmt = $db->prepare('INSERT INTO cpu_numbers SET number=?');
-        $stmt->execute(array($cpu_set_numbers));
+
+        //CPUが最初に設定した3桁の数字をDBへ保存する
+        $insert->insertCpuNumber($cpu_set_numbers);
 
         //前回のゲームスコアを削除する(自分)
-        $stmt = $db->prepare('DELETE FROM select_numbers');
+        $stmt = $connect->pdo()->prepare('DELETE FROM select_numbers');
         $stmt->execute();
         
         ////前回のゲームスコアを削除する(CPU)
-        $stmt = $db->prepare('DELETE FROM selected_numbers');
+        $stmt = $connect->pdo()->prepare('DELETE FROM selected_numbers');
         $stmt->execute();
 
         ////前回のゲームスコアを削除する(CPU)
-        $stmt = $db->prepare('DELETE FROM counts');
+        $stmt = $connect->pdo()->prepare('DELETE FROM counts');
         $stmt->execute();
 
         header('Location: main.php');
