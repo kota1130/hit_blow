@@ -37,12 +37,14 @@
         //自分が入力した3桁の数値をデータベースへ保存する
         $user->CallNumber($input_number);
 
-        //CPUが数字を当てる(CPUが入力した3桁の数値をデータベースへ保存する)
-        $input_cpu_number = generateNumber();
-        $cpu->CallSelectedNumber($input_cpu_number);
-
-        //CPUが相手の数字を当てるために入力した最新の数字(スコア)を取得
-        $cpu_last_score = $select->selectCpuLastScore();
+         //CPUが数字を当てる(CPUが入力した3桁の数値をデータベースへ保存する)
+        $cpu_result_data = $select->selectCpuResult();
+        if(!empty($cpu_result_data)){
+          $input_cpu_number = $cpu->CallSelectedNumber();
+        }else{
+          $input_cpu_number = generateNumber();
+        }
+        $insert->insertCpuScore($input_cpu_number);
 
         header('Location: main.php');
         exit();
@@ -54,6 +56,10 @@
       $error = 'blank';
     }
   }
+
+  //CPUが相手の数字を当てるために入力した最新の数字(スコア)を取得
+  $cpu_last_score = $select->selectCpuLastScore();
+        
 ?>
 
 <!DOCTYPE html>
@@ -118,7 +124,7 @@
                 <td><?php echo $cpu_blow; ?></td>
               </tr>
             <?php endforeach; ?>
-            <?php $insert->insertCpuResult($cpu_hit,$cpu_blow); ?>
+            <?php $insert->insertCpuResult($cpu_hit,$cpu_blow,$cpu_last_score['score']);?>
             <?php $result = $gamemaster->isWinner($my_hit,$cpu_hit); ?>
           </tbody>
         </table>
